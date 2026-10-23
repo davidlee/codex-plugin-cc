@@ -75,7 +75,7 @@ Use `--write` only when Codex should edit; afterwards review its changes with
 |---|---|
 | `--write` | Sandbox `workspace-write` instead of the default `read-only`. |
 | `--model` | Codex model. Omitted: the Codex config default. Do not change the model on `--resume`; the thread keeps its own. |
-| `--effort` | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`. Omitted: the config default. |
+| `--effort` | Reasoning effort, passed through to Codex. Supported levels vary by model (`codex debug models` lists them per model; `minimal` is rejected by current models). Omitted: the config default. |
 | `--resume` | Continue the most recent finished Codex thread from this Claude session, whatever its mode. Run unrelated threads in sequence, not interleaved, or start fresh. |
 | `--fresh` | Start a new thread (the default when neither flag is given). |
 | `--cwd` | Project root. Defaults to the shell's working directory. |
