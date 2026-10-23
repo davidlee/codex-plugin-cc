@@ -763,6 +763,27 @@ test("task --fresh is treated as routing control and does not leak into the prom
   assert.equal(fakeState.lastTurnStart.prompt, "diagnose the flaky test");
 });
 
+test("task leaves the approval policy to the user's Codex config on start and resume", () => {
+  const repo = makeTempDir();
+  const binDir = makeTempDir();
+  const statePath = path.join(binDir, "fake-codex-state.json");
+  installFakeCodex(binDir);
+  initGitRepo(repo);
+  fs.writeFileSync(path.join(repo, "README.md"), "hello\n");
+  run("git", ["add", "README.md"], { cwd: repo });
+  run("git", ["commit", "-m", "init"], { cwd: repo });
+
+  const firstRun = run("node", [SCRIPT, "task", "initial task"], { cwd: repo, env: buildEnv(binDir) });
+  assert.equal(firstRun.status, 0, firstRun.stderr);
+  const resumed = run("node", [SCRIPT, "task", "--resume", "follow up"], { cwd: repo, env: buildEnv(binDir) });
+  assert.equal(resumed.status, 0, resumed.stderr);
+
+  const fakeState = JSON.parse(fs.readFileSync(statePath, "utf8"));
+  assert.equal(fakeState.lastThreadStart.approvalPolicy ?? null, null);
+  assert.equal(fakeState.lastThreadResume.approvalPolicy ?? null, null);
+  assert.equal(fakeState.lastThreadStart.sandbox, "read-only");
+});
+
 test("task forwards model selection and reasoning effort to app-server turn/start", () => {
   const repo = makeTempDir();
   const binDir = makeTempDir();
