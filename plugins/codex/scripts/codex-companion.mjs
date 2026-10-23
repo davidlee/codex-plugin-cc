@@ -77,7 +77,7 @@ function printUsage() {
       "  node scripts/codex-companion.mjs setup [--enable-review-gate|--disable-review-gate] [--json]",
       "  node scripts/codex-companion.mjs review [--wait|--background] [--base <ref>] [--scope <auto|working-tree|branch>]",
       "  node scripts/codex-companion.mjs adversarial-review [--wait|--background] [--base <ref>] [--scope <auto|working-tree|branch>] [focus text]",
-      "  node scripts/codex-companion.mjs task [--background] [--write] [--resume-last|--resume|--fresh] [--model <model>] [--effort <level>] [prompt]",
+      "  node scripts/codex-companion.mjs task [--background] [--write|--read-only] [--resume-last|--resume|--fresh] [--model <model>] [--effort <level>] [prompt]",
       "  node scripts/codex-companion.mjs transfer [--source <claude-jsonl>] [--json]",
       "  node scripts/codex-companion.mjs status [job-id] [--all] [--json]",
       "  node scripts/codex-companion.mjs result [job-id] [--json]",
@@ -474,7 +474,7 @@ async function executeTaskRun(request) {
     defaultPrompt: resumeThreadId ? DEFAULT_CONTINUE_PROMPT : "",
     model: request.model,
     effort: request.effort,
-    sandbox: request.write ? "workspace-write" : "read-only",
+    sandbox: request.sandbox,
     onProgress: request.onProgress,
     persistThread: true,
     threadName: resumeThreadId ? null : buildPersistentTaskThreadName(request.prompt || DEFAULT_CONTINUE_PROMPT)
@@ -587,13 +587,25 @@ function buildTaskJob(workspaceRoot, taskMetadata, write) {
   });
 }
 
-function buildTaskRequest({ cwd, model, effort, prompt, write, resumeLast, jobId }) {
+// null leaves the sandbox to the user's Codex config (`sandbox_mode`).
+function resolveTaskSandbox({ write, readOnly }) {
+  if (write && readOnly) {
+    throw new Error("Choose either --write or --read-only.");
+  }
+  if (write) {
+    return "workspace-write";
+  }
+  return readOnly ? "read-only" : null;
+}
+
+function buildTaskRequest({ cwd, model, effort, prompt, write, sandbox, resumeLast, jobId }) {
   return {
     cwd,
     model,
     effort,
     prompt,
     write,
+    sandbox,
     resumeLast,
     jobId
   };
@@ -748,7 +760,7 @@ async function handleReview(argv) {
 async function handleTask(argv) {
   const { options, positionals } = parseCommandInput(argv, {
     valueOptions: ["model", "effort", "cwd", "prompt-file"],
-    booleanOptions: ["json", "write", "resume-last", "resume", "fresh", "background"],
+    booleanOptions: ["json", "write", "read-only", "resume-last", "resume", "fresh", "background"],
     aliasMap: {
       m: "model"
     }
@@ -766,6 +778,7 @@ async function handleTask(argv) {
     throw new Error("Choose either --resume/--resume-last or --fresh.");
   }
   const write = Boolean(options.write);
+  const sandbox = resolveTaskSandbox({ write, readOnly: Boolean(options["read-only"]) });
   const taskMetadata = buildTaskRunMetadata({
     prompt,
     resumeLast
@@ -782,6 +795,7 @@ async function handleTask(argv) {
       effort,
       prompt,
       write,
+      sandbox,
       resumeLast,
       jobId: job.id
     });
@@ -800,6 +814,7 @@ async function handleTask(argv) {
         effort,
         prompt,
         write,
+        sandbox,
         resumeLast,
         jobId: job.id,
         onProgress: progress

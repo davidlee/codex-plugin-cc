@@ -763,26 +763,83 @@ test("task --fresh is treated as routing control and does not leak into the prom
   assert.equal(fakeState.lastTurnStart.prompt, "diagnose the flaky test");
 });
 
-test("task leaves the approval policy to the user's Codex config on start and resume", () => {
+function makeTaskRepo() {
   const repo = makeTempDir();
   const binDir = makeTempDir();
-  const statePath = path.join(binDir, "fake-codex-state.json");
   installFakeCodex(binDir);
   initGitRepo(repo);
   fs.writeFileSync(path.join(repo, "README.md"), "hello\n");
   run("git", ["add", "README.md"], { cwd: repo });
   run("git", ["commit", "-m", "init"], { cwd: repo });
+  const companion = (...args) => run("node", [SCRIPT, ...args], { cwd: repo, env: buildEnv(binDir) });
+  const fakeState = () => JSON.parse(fs.readFileSync(path.join(binDir, "fake-codex-state.json"), "utf8"));
+  return { repo, companion, fakeState };
+}
 
-  const firstRun = run("node", [SCRIPT, "task", "initial task"], { cwd: repo, env: buildEnv(binDir) });
+test("task leaves the approval policy and sandbox to the user's Codex config on start and resume", () => {
+  const { companion, fakeState } = makeTaskRepo();
+
+  const firstRun = companion("task", "initial task");
   assert.equal(firstRun.status, 0, firstRun.stderr);
-  const resumed = run("node", [SCRIPT, "task", "--resume", "follow up"], { cwd: repo, env: buildEnv(binDir) });
+  const resumed = companion("task", "--resume", "follow up");
   assert.equal(resumed.status, 0, resumed.stderr);
 
-  const fakeState = JSON.parse(fs.readFileSync(statePath, "utf8"));
-  assert.equal(fakeState.lastThreadStart.approvalPolicy ?? null, null);
-  assert.equal(fakeState.lastThreadResume.approvalPolicy ?? null, null);
-  assert.equal(fakeState.lastThreadStart.sandbox, "read-only");
+  const { lastThreadStart, lastThreadResume } = fakeState();
+  assert.equal(lastThreadStart.approvalPolicy ?? null, null);
+  assert.equal(lastThreadResume.approvalPolicy ?? null, null);
+  assert.equal(lastThreadStart.sandbox ?? null, null);
+  assert.equal(lastThreadResume.sandbox ?? null, null);
 });
+
+for (const [flag, sandbox] of [["--write", "workspace-write"], ["--read-only", "read-only"]]) {
+  test(`task ${flag} requests the ${sandbox} sandbox on start and resume`, () => {
+    const { companion, fakeState } = makeTaskRepo();
+
+    const firstRun = companion("task", flag, "initial task");
+    assert.equal(firstRun.status, 0, firstRun.stderr);
+    const resumed = companion("task", flag, "--resume", "follow up");
+    assert.equal(resumed.status, 0, resumed.stderr);
+
+    const { lastThreadStart, lastThreadResume, lastTurnStart } = fakeState();
+    assert.equal(lastThreadStart.sandbox, sandbox);
+    assert.equal(lastThreadResume.sandbox, sandbox);
+    assert.equal(lastTurnStart.prompt, "follow up");
+  });
+}
+
+test("task rejects --write combined with --read-only", () => {
+  const { companion } = makeTaskRepo();
+
+  const result = companion("task", "--write", "--read-only", "fix it");
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /--write.*--read-only/);
+});
+
+test("background task keeps its --read-only sandbox", () => {
+  const { companion, fakeState } = makeTaskRepo();
+
+  const launched = companion("task", "--background", "--read-only", "--json", "investigate");
+  assert.equal(launched.status, 0, launched.stderr);
+  const { jobId } = JSON.parse(launched.stdout);
+  const waited = companion("status", jobId, "--wait", "--timeout-ms", "15000", "--json");
+  assert.equal(waited.status, 0, waited.stderr);
+  assert.equal(JSON.parse(waited.stdout).job.status, "completed");
+
+  assert.equal(fakeState().lastThreadStart.sandbox, "read-only");
+});
+
+for (const command of ["review", "adversarial-review"]) {
+  test(`${command} stays in the read-only sandbox`, () => {
+    const { repo, companion, fakeState } = makeTaskRepo();
+    fs.writeFileSync(path.join(repo, "README.md"), "changed\n");
+
+    const result = companion(command);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(fakeState().lastThreadStart.sandbox, "read-only");
+  });
+}
 
 test("task forwards the model name verbatim and reasoning effort to app-server turn/start", () => {
   const repo = makeTempDir();
@@ -2008,6 +2065,7 @@ test("stop hook runs a stop-time review task and blocks on findings when the rev
   assert.match(fakeState.lastTurnStart.prompt, /<compact_output_contract>/i);
   assert.match(fakeState.lastTurnStart.prompt, /Only review the work from the previous Claude turn/i);
   assert.match(fakeState.lastTurnStart.prompt, /I completed the refactor and updated the retry logic\./);
+  assert.equal(fakeState.lastThreadStart.sandbox, "read-only");
 
   const status = run("node", [SCRIPT, "status"], {
     cwd: repo,

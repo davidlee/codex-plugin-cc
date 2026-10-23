@@ -128,7 +128,7 @@ This command is read-only. It does not fix code.
 
 A skill Claude invokes itself when you ask it to consult or delegate to Codex. It makes one call to the companion `task` command and relays Codex's answer.
 
-- Read-only by default; with `--write` Codex can change files, for example to record findings on a review ledger.
+- The sandbox follows your Codex config (`sandbox_mode`); `--write` forces `workspace-write` and `--read-only` forces `read-only`. With `approval_policy = "never"`, either flag makes Codex refuse MCP tool calls.
 - `--model` and `--effort` select the Codex model and reasoning effort; omitted, Codex uses your config defaults.
 - `--resume` continues the most recent Codex thread from the current Claude session.
 

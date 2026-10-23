@@ -10,7 +10,7 @@ it, wait, and relay its answer.
 
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/codex-companion.mjs" task --json \
-  [--write] [--model <model>] [--effort <level>] [--resume | --fresh] \
+  [--write | --read-only] [--model <model>] [--effort <level>] [--resume | --fresh] \
   [--cwd <project-root>] [--prompt-file <path> | "<prompt>"]
 ```
 
@@ -25,10 +25,17 @@ override everything here.
 
 | mode | tier | effort | sandbox |
 |---|---|---|---|
-| Adversarial review | strong (the user's reviewer model) | `medium`; `high` for substantial changes or designs | read-only; `--write` when Codex records findings on a ledger |
+| Adversarial review | strong (the user's reviewer model) | `medium`; `high` for substantial changes or designs | omit; the brief forbids edits |
 | Adversarial review, very complex (large cross-cutting design, concurrency, security, data integrity) | strongest | `high` | as above |
-| General delegation | default: omit `--model` (Codex config default) | omit | `--write` only if Codex should change files |
+| General delegation | default: omit `--model` (Codex config default) | omit | omit |
 | General delegation, especially complex | strong | omit, or `high` | as above |
+
+Sandbox: omit both flags, so Codex uses the user's config (`sandbox_mode`).
+Use `--read-only` only where a run must not be able to write, and `--write`
+only when the config is read-only and Codex must write. Where the config sets
+`approval_policy = "never"` (for example inside a jail that is itself the
+sandbox), either flag switches Codex's own sandbox on and Codex then refuses
+all MCP tool calls.
 
 ## Adversarial review
 
@@ -43,7 +50,8 @@ Codex has none of this conversation. The brief states:
   marks inference as inference;
 - what Codex must not change (normally: everything except the ledger).
 
-Without a ledger, Codex replies with findings ordered by severity, read-only.
+Without a ledger, Codex replies with findings ordered by severity and changes
+nothing.
 
 ### On a doctrine review ledger
 
@@ -52,7 +60,7 @@ raiser; you are the responder.
 
 1. Open or identify the RV ledger for the subject (`doctrine review new
    --facet <facet> --target <ref> --raiser codex`), unless one exists.
-2. Brief Codex with `--write`: the RV id, raiser label `codex`, the facet, and
+2. Brief Codex (no sandbox flag): the RV id, raiser label `codex`, the facet, and
    an instruction to follow the project's doctrine review workflow (its
    doctrine skills, and the doctrine MCP tools or `doctrine review` CLI) to
    raise findings and conclude the pass. Do not restate doctrine's verbs.
@@ -66,14 +74,15 @@ raiser; you are the responder.
 
 State the goal, constraints, the files in scope, what "done" means, and how
 Codex should report (for example: changes made, evidence, open questions).
-Use `--write` only when Codex should edit; afterwards review its changes with
-`git diff` before building on them.
+If Codex edited files, review its changes with `git diff` before building on
+them.
 
 ## Flags
 
 | flag | meaning |
 |---|---|
-| `--write` | Sandbox `workspace-write` instead of the default `read-only`. |
+| `--write` | Sandbox `workspace-write`. With neither sandbox flag, the Codex config's `sandbox_mode` applies. |
+| `--read-only` | Sandbox `read-only`. Exclusive with `--write`. |
 | `--model` | Codex model. Omitted: the Codex config default. Do not change the model on `--resume`; the thread keeps its own. |
 | `--effort` | Reasoning effort, passed through to Codex. Supported levels vary by model (`codex debug models` lists them per model; `minimal` is rejected by current models). Omitted: the config default. |
 | `--resume` | Continue the most recent finished Codex thread from this Claude session, whatever its mode. Run unrelated threads in sequence, not interleaved, or start fresh. |
