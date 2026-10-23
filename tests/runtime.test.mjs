@@ -784,7 +784,7 @@ test("task leaves the approval policy to the user's Codex config on start and re
   assert.equal(fakeState.lastThreadStart.sandbox, "read-only");
 });
 
-test("task forwards model selection and reasoning effort to app-server turn/start", () => {
+test("task forwards the model name verbatim and reasoning effort to app-server turn/start", () => {
   const repo = makeTempDir();
   const binDir = makeTempDir();
   const statePath = path.join(binDir, "fake-codex-state.json");
@@ -801,7 +801,7 @@ test("task forwards model selection and reasoning effort to app-server turn/star
 
   assert.equal(result.status, 0, result.stderr);
   const fakeState = JSON.parse(fs.readFileSync(statePath, "utf8"));
-  assert.equal(fakeState.lastTurnStart.model, "gpt-5.3-codex-spark");
+  assert.equal(fakeState.lastTurnStart.model, "spark");
   assert.equal(fakeState.lastTurnStart.effort, "low");
 });
 
