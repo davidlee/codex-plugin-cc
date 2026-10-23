@@ -35,13 +35,13 @@ function getJobTypeLabel(job) {
     return "review";
   }
   if (job.jobClass === "task") {
-    return "rescue";
+    return "task";
   }
   if (job.kind === "review") {
     return "review";
   }
   if (job.kind === "task") {
-    return "rescue";
+    return "task";
   }
   return "job";
 }

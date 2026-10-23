@@ -11,7 +11,8 @@ they already have.
 
 - `/codex:review` for a normal read-only Codex review
 - `/codex:adversarial-review` for a steerable challenge review
-- `/codex:rescue`, `/codex:transfer`, `/codex:status`, `/codex:result`, and `/codex:cancel` to delegate work, hand off sessions, and manage background jobs
+- the `codex:ask` skill, which lets Claude send Codex a prompt (review, second opinion, or delegated work) and continue the thread
+- `/codex:transfer`, `/codex:status`, `/codex:result`, and `/codex:cancel` to hand off sessions and manage background jobs
 
 ## Requirements
 
@@ -62,7 +63,7 @@ If Codex is installed but not logged in yet, run:
 After install, you should see:
 
 - the slash commands listed below
-- the `codex:codex-rescue` subagent in `/agents`
+- the `codex:ask` skill
 
 One simple first run is:
 
@@ -123,44 +124,23 @@ Examples:
 
 This command is read-only. It does not fix code.
 
-### `/codex:rescue`
+### `codex:ask`
 
-Hands a task to Codex through the `codex:codex-rescue` subagent.
+A skill Claude invokes itself when you ask it to consult or delegate to Codex. It makes one call to the companion `task` command and relays Codex's answer.
 
-Use it when you want Codex to:
+- Read-only by default; with `--write` Codex can change files, for example to record findings on a review ledger.
+- `--model` and `--effort` select the Codex model and reasoning effort; omitted, Codex uses your config defaults.
+- `--resume` continues the most recent Codex thread from the current Claude session.
 
-- investigate a bug
-- try a fix
-- continue a previous Codex task
-- take a faster or cheaper pass with a smaller model
-
-> [!NOTE]
-> Depending on the task and the model you choose these tasks might take a long time and it's generally recommended to force the task to be in the background or move the agent to the background.
-
-It supports `--background`, `--wait`, `--resume`, and `--fresh`. If you omit `--resume` and `--fresh`, the plugin can offer to continue the latest rescue thread for this repo.
+The skill tells Claude which model and effort to use for adversarial review and for general delegation, and how to run review rounds on a doctrine review ledger.
 
 Examples:
 
-```bash
-/codex:rescue investigate why the tests started failing
-/codex:rescue fix the failing test with the smallest safe patch
-/codex:rescue --resume apply the top fix from the last run
-/codex:rescue --model gpt-5.4-mini --effort medium investigate the flaky integration test
-/codex:rescue --model spark fix the issue quickly
-/codex:rescue --background investigate the regression
-```
-
-You can also just ask for a task to be delegated to Codex:
-
 ```text
-Ask Codex to redesign the database connection to be more resilient.
+Ask Codex for an adversarial review of this branch against main.
+Have Codex raise its findings on RV-012, then resume it once I've disposed them.
+Delegate the flaky-test investigation to Codex.
 ```
-
-**Notes:**
-
-- if you do not pass `--model` or `--effort`, Codex chooses its own defaults.
-- if you say `spark`, the plugin maps that to `gpt-5.3-codex-spark`
-- follow-up rescue requests can continue the latest Codex task in the repo
 
 ### `/codex:transfer`
 
@@ -246,15 +226,14 @@ When the review gate is enabled, the plugin uses a `Stop` hook to run a targeted
 
 ### Hand A Problem To Codex
 
-```bash
-/codex:rescue investigate why the build is failing in CI
+```text
+Ask Codex to investigate why the build is failing in CI.
 ```
 
 ### Start Something Long-Running
 
 ```bash
 /codex:adversarial-review --background
-/codex:rescue --background investigate the flaky test
 ```
 
 Then check in with:
