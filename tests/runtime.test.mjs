@@ -829,6 +829,30 @@ test("background task keeps its --read-only sandbox", () => {
   assert.equal(fakeState().lastThreadStart.sandbox, "read-only");
 });
 
+for (const [flags, sandbox, label] of [
+  [[], null, "config"],
+  [["--write"], "workspace-write", "workspace-write"],
+  [["--read-only"], "read-only", "read-only"]
+]) {
+  test(`task ${flags.join(" ") || "without a sandbox flag"} records its sandbox on the job`, () => {
+    const { companion } = makeTaskRepo();
+
+    const taskRun = companion("task", ...flags, "fix the flaky test");
+    assert.equal(taskRun.status, 0, taskRun.stderr);
+
+    const snapshot = companion("status", "--json");
+    assert.equal(snapshot.status, 0, snapshot.stderr);
+    const job = JSON.parse(snapshot.stdout).latestFinished;
+    assert.equal(job.sandbox, sandbox);
+    assert.equal("write" in job, false);
+
+    const report = companion("status", job.id);
+    assert.equal(report.status, 0, report.stderr);
+    assert.match(report.stdout, new RegExp(`^  Sandbox: ${label}$`, "m"));
+    assert.doesNotMatch(report.stdout, /Review changes/);
+  });
+}
+
 for (const command of ["review", "adversarial-review"]) {
   test(`${command} stays in the read-only sandbox`, () => {
     const { repo, companion, fakeState } = makeTaskRepo();

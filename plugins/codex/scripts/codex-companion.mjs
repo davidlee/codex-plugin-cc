@@ -487,11 +487,6 @@ async function executeTaskRun(request) {
       rawOutput,
       failureMessage,
       reasoningSummary: result.reasoningSummary
-    },
-    {
-      title: taskMetadata.title,
-      jobId: request.jobId ?? null,
-      write: Boolean(request.write)
     }
   );
   const payload = {
@@ -510,8 +505,7 @@ async function executeTaskRun(request) {
     rendered,
     summary: firstMeaningfulLine(rawOutput, firstMeaningfulLine(failureMessage, `${taskMetadata.title} finished.`)),
     jobTitle: taskMetadata.title,
-    jobClass: "task",
-    write: Boolean(request.write)
+    jobClass: "task"
   };
 }
 
@@ -550,7 +544,7 @@ function getJobKindLabel(kind, jobClass) {
   return jobClass === "review" ? "review" : "task";
 }
 
-function createCompanionJob({ prefix, kind, title, workspaceRoot, jobClass, summary, write = false }) {
+function createCompanionJob({ prefix, kind, title, workspaceRoot, jobClass, summary }) {
   return createJobRecord({
     id: generateJobId(prefix),
     kind,
@@ -558,8 +552,7 @@ function createCompanionJob({ prefix, kind, title, workspaceRoot, jobClass, summ
     title,
     workspaceRoot,
     jobClass,
-    summary,
-    write
+    summary
   });
 }
 
@@ -575,16 +568,18 @@ function createTrackedProgress(job, options = {}) {
   };
 }
 
-function buildTaskJob(workspaceRoot, taskMetadata, write) {
-  return createCompanionJob({
-    prefix: "task",
-    kind: "task",
-    title: taskMetadata.title,
-    workspaceRoot,
-    jobClass: "task",
-    summary: taskMetadata.summary,
-    write
-  });
+function buildTaskJob(workspaceRoot, taskMetadata, sandbox) {
+  return {
+    ...createCompanionJob({
+      prefix: "task",
+      kind: "task",
+      title: taskMetadata.title,
+      workspaceRoot,
+      jobClass: "task",
+      summary: taskMetadata.summary
+    }),
+    sandbox
+  };
 }
 
 // null leaves the sandbox to the user's Codex config (`sandbox_mode`).
@@ -598,13 +593,12 @@ function resolveTaskSandbox({ write, readOnly }) {
   return readOnly ? "read-only" : null;
 }
 
-function buildTaskRequest({ cwd, model, effort, prompt, write, sandbox, resumeLast, jobId }) {
+function buildTaskRequest({ cwd, model, effort, prompt, sandbox, resumeLast, jobId }) {
   return {
     cwd,
     model,
     effort,
     prompt,
-    write,
     sandbox,
     resumeLast,
     jobId
@@ -777,8 +771,7 @@ async function handleTask(argv) {
   if (resumeLast && fresh) {
     throw new Error("Choose either --resume/--resume-last or --fresh.");
   }
-  const write = Boolean(options.write);
-  const sandbox = resolveTaskSandbox({ write, readOnly: Boolean(options["read-only"]) });
+  const sandbox = resolveTaskSandbox({ write: Boolean(options.write), readOnly: Boolean(options["read-only"]) });
   const taskMetadata = buildTaskRunMetadata({
     prompt,
     resumeLast
@@ -788,13 +781,12 @@ async function handleTask(argv) {
     ensureCodexAvailable(cwd);
     requireTaskRequest(prompt, resumeLast);
 
-    const job = buildTaskJob(workspaceRoot, taskMetadata, write);
+    const job = buildTaskJob(workspaceRoot, taskMetadata, sandbox);
     const request = buildTaskRequest({
       cwd,
       model,
       effort,
       prompt,
-      write,
       sandbox,
       resumeLast,
       jobId: job.id
@@ -804,7 +796,7 @@ async function handleTask(argv) {
     return;
   }
 
-  const job = buildTaskJob(workspaceRoot, taskMetadata, write);
+  const job = buildTaskJob(workspaceRoot, taskMetadata, sandbox);
   await runForegroundCommand(
     job,
     (progress) =>
@@ -813,7 +805,6 @@ async function handleTask(argv) {
         model,
         effort,
         prompt,
-        write,
         sandbox,
         resumeLast,
         jobId: job.id,
